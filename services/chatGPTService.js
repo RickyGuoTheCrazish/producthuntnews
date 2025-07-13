@@ -16,23 +16,26 @@ class ChatGPTService {
     this.retryDelay = 2000; // 2 seconds
   }
 
-  // Create optimized analysis prompt for a product (shorter for cost efficiency)
+  // Create optimized analysis prompt for a product (with Chinese translation)
   createAnalysisPrompt(product) {
-    return `Analyze this Product Hunt product for target users and market insights:
+    return `Analyze this Product Hunt product for target users and market insights. Provide response in Chinese except for the product name:
 
 Product: ${product.name}
 Tagline: ${product.tagline}
 Votes: ${product.votesCount} | Comments: ${product.commentsCount}
 Topics: ${product.topics?.map(t => t.name).join(', ') || 'None'}
 
-Return JSON:
+Return JSON with Chinese content (except productName):
 {
-  "targetUsers": [{"demographic": "User group", "likelihood": "high/medium/low"}],
-  "successProbability": "high/medium/low",
-  "summary": "Brief 1-sentence analysis"
+  "productName": "${product.name}",
+  "targetUsers": [{"demographic": "目标用户群体描述", "likelihood": "高/中/低"}],
+  "successProbability": "高/中/低",
+  "summary": "简短的一句话分析",
+  "marketInsights": "市场洞察和建议",
+  "userPersonas": ["用户画像1", "用户画像2", "用户画像3"]
 }
 
-Be concise and focus on the most likely target users.`;
+请用中文分析，但保持产品名称为英文。重点关注最可能的目标用户群体。`;
   }
 
   // Analyze a single product with ChatGPT
@@ -123,39 +126,48 @@ Be concise and focus on the most likely target users.`;
     return false;
   }
 
-  // Fallback analysis when ChatGPT is unavailable
+  // Fallback analysis when ChatGPT is unavailable (Chinese version)
   createFallbackAnalysis(product) {
     // Simple rule-based analysis based on product data
     const voteCount = product.votesCount || 0;
     const topics = product.topics?.map(t => t.name) || [];
 
     let targetUsers = [];
-    let successProbability = 'medium';
+    let successProbability = '中';
 
-    // Basic categorization based on topics and votes
+    // Basic categorization based on topics and votes (Chinese)
     if (topics.some(t => t.toLowerCase().includes('developer') || t.toLowerCase().includes('tech'))) {
-      targetUsers.push({ demographic: "Developers and Tech Professionals", likelihood: "high" });
+      targetUsers.push({ demographic: "开发者和技术专业人士", likelihood: "高" });
     }
     if (topics.some(t => t.toLowerCase().includes('business') || t.toLowerCase().includes('productivity'))) {
-      targetUsers.push({ demographic: "Business Professionals", likelihood: "high" });
+      targetUsers.push({ demographic: "商业专业人士", likelihood: "高" });
     }
     if (topics.some(t => t.toLowerCase().includes('design') || t.toLowerCase().includes('creative'))) {
-      targetUsers.push({ demographic: "Designers and Creatives", likelihood: "high" });
+      targetUsers.push({ demographic: "设计师和创意工作者", likelihood: "高" });
+    }
+    if (topics.some(t => t.toLowerCase().includes('ai') || t.toLowerCase().includes('machine learning'))) {
+      targetUsers.push({ demographic: "AI和机器学习从业者", likelihood: "高" });
+    }
+    if (topics.some(t => t.toLowerCase().includes('marketing') || t.toLowerCase().includes('social'))) {
+      targetUsers.push({ demographic: "营销和社交媒体专家", likelihood: "高" });
     }
 
     // Default if no specific category found
     if (targetUsers.length === 0) {
-      targetUsers.push({ demographic: "General Tech Users", likelihood: "medium" });
+      targetUsers.push({ demographic: "一般科技用户", likelihood: "中" });
     }
 
     // Success probability based on vote count
-    if (voteCount > 100) successProbability = 'high';
-    else if (voteCount < 20) successProbability = 'low';
+    if (voteCount > 100) successProbability = '高';
+    else if (voteCount < 20) successProbability = '低';
 
     return {
+      productName: product.name,
       targetUsers,
       successProbability,
-      summary: `Product with ${voteCount} votes targeting ${targetUsers[0].demographic}`,
+      summary: `获得${voteCount}票的产品，主要面向${targetUsers[0].demographic}`,
+      marketInsights: "基于产品类别和投票数的基础分析",
+      userPersonas: targetUsers.slice(0, 3).map(user => user.demographic),
       fallback: true,
       analyzedAt: new Date().toISOString()
     };

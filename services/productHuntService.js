@@ -8,7 +8,66 @@ class ProductHuntService {
     this.retryDelay = 1000; // 1 second
   }
 
-  // GraphQL query to get trending products
+  // GraphQL query to get today's trending products (launched today, sorted by votes)
+  getTodaysTrendingProductsQuery() {
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+
+    return `
+      query getTodaysPosts($first: Int!, $after: String, $postedAfter: DateTime!) {
+        posts(first: $first, after: $after, order: VOTES, postedAfter: $postedAfter) {
+          edges {
+            node {
+              id
+              name
+              tagline
+              description
+              url
+              votesCount
+              commentsCount
+              createdAt
+              featuredAt
+              website
+              productLinks {
+                type
+                url
+              }
+              makers {
+                id
+                name
+                username
+                profileImage
+              }
+              topics {
+                edges {
+                  node {
+                    id
+                    name
+                    slug
+                  }
+                }
+              }
+              thumbnail {
+                type
+                url
+              }
+              user {
+                id
+                name
+                username
+              }
+            }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    `;
+  }
+
+  // Fallback query for general trending products if today's query fails
   getTrendingProductsQuery() {
     return `
       query getTrendingPosts($first: Int!, $after: String) {
@@ -145,30 +204,57 @@ class ProductHuntService {
     return error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT';
   }
 
-  // Get trending products from Product Hunt
+  // Get today's trending products from Product Hunt (launched today, sorted by votes)
   async getTrendingProducts(accessToken, limit = 20) {
     try {
-      console.log(`Fetching ${limit} trending products from Product Hunt...`);
+      console.log(`Fetching ${limit} products launched today from Product Hunt...`);
 
-      const query = this.getTrendingProductsQuery();
-      const variables = {
+      // First try to get today's products
+      const todaysQuery = this.getTodaysTrendingProductsQuery();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Start of today
+
+      const todaysVariables = {
         first: limit,
-        after: null
+        after: null,
+        postedAfter: today.toISOString()
       };
 
-      const response = await this.makeGraphQLRequest(query, variables, accessToken);
+      try {
+        const response = await this.makeGraphQLRequest(todaysQuery, todaysVariables, accessToken);
 
-      if (!response.data || !response.data.posts) {
-        throw new Error('Invalid response structure from Product Hunt API');
+        if (response.data && response.data.posts && response.data.posts.edges.length > 0) {
+          const posts = response.data.posts.edges.map(edge => edge.node);
+          const products = posts.map(post => this.transformProduct(post));
+
+          console.log(`Successfully fetched ${products.length} products launched today`);
+          return products;
+        } else {
+          console.log('No products found for today, falling back to general trending...');
+          throw new Error('No products found for today');
+        }
+      } catch (todayError) {
+        console.log('Today\'s products query failed, trying general trending...', todayError.message);
+
+        // Fallback to general trending products
+        const query = this.getTrendingProductsQuery();
+        const variables = {
+          first: limit,
+          after: null
+        };
+
+        const response = await this.makeGraphQLRequest(query, variables, accessToken);
+
+        if (!response.data || !response.data.posts) {
+          throw new Error('Invalid response structure from Product Hunt API');
+        }
+
+        const posts = response.data.posts.edges.map(edge => edge.node);
+        const products = posts.map(post => this.transformProduct(post));
+
+        console.log(`Successfully fetched ${products.length} trending products (fallback)`);
+        return products;
       }
-
-      const posts = response.data.posts.edges.map(edge => edge.node);
-
-      // Transform the data to a more usable format
-      const products = posts.map(post => this.transformProduct(post));
-
-      console.log(`Successfully fetched ${products.length} trending products`);
-      return products;
 
     } catch (error) {
       console.error('Error fetching trending products via GraphQL:', error.message);

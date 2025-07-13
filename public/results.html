@@ -311,7 +311,8 @@
                 </div>
                 
                 <div class="actions">
-                    <button class="btn btn-success" onclick="exportResults()">📥 Export Results</button>
+                    <button class="btn btn-success" onclick="exportResultsCSV()">📊 导出CSV</button>
+                    <button class="btn btn-success" onclick="exportResults()">📥 Export JSON</button>
                     <a href="/" class="btn btn-secondary">🏠 Back to Home</a>
                     <button class="btn" onclick="runNewAnalysis()">🔄 Run New Analysis</button>
                 </div>
@@ -533,12 +534,70 @@
             const dataStr = JSON.stringify(analysisData, null, 2);
             const dataBlob = new Blob([dataStr], {type: 'application/json'});
             const url = URL.createObjectURL(dataBlob);
-            
+
             const link = document.createElement('a');
             link.href = url;
             link.download = `product_analysis_${new Date().toISOString().split('T')[0]}.json`;
             link.click();
-            
+
+            URL.revokeObjectURL(url);
+        }
+
+        function exportResultsCSV() {
+            if (!analysisData || !analysisData.products) {
+                alert('没有数据可导出');
+                return;
+            }
+
+            // CSV headers in Chinese
+            const headers = [
+                '产品名称',
+                '标语',
+                '投票数',
+                '评论数',
+                '成功概率',
+                '目标用户群体',
+                '市场洞察',
+                '用户画像',
+                '分析摘要',
+                '产品链接',
+                '主题标签',
+                '创建时间'
+            ];
+
+            // Convert data to CSV format
+            const csvData = analysisData.products.map(product => {
+                const analysis = product.analysis || {};
+
+                return [
+                    `"${product.name || ''}"`,
+                    `"${product.tagline || ''}"`,
+                    product.votesCount || 0,
+                    product.commentsCount || 0,
+                    `"${analysis.successProbability || '未知'}"`,
+                    `"${analysis.targetUsers ? analysis.targetUsers.map(u => `${u.demographic}(${u.likelihood})`).join('; ') : '未分析'}"`,
+                    `"${analysis.marketInsights || '无'}"`,
+                    `"${analysis.userPersonas ? analysis.userPersonas.join('; ') : '无'}"`,
+                    `"${analysis.summary || '无分析'}"`,
+                    `"${product.url || ''}"`,
+                    `"${product.topics ? product.topics.map(t => t.name).join(', ') : '无'}"`,
+                    `"${product.createdAt ? new Date(product.createdAt).toLocaleDateString('zh-CN') : '未知'}"`
+                ].join(',');
+            });
+
+            // Combine headers and data
+            const csvContent = [headers.join(','), ...csvData].join('\n');
+
+            // Add BOM for proper Chinese character display in Excel
+            const BOM = '\uFEFF';
+            const csvBlob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(csvBlob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `产品分析报告_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+
             URL.revokeObjectURL(url);
         }
 
