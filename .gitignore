@@ -12,7 +12,7 @@ jspm_packages/
 
 # Output data (even though we don't store data, keep this for safety)
 data/
-*.json
+data/*.json
 
 # Logs
 logs/
