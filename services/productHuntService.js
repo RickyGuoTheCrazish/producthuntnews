@@ -133,6 +133,12 @@ class ProductHuntService {
       console.log('GraphQL Response status:', response.status);
       console.log('GraphQL Response data keys:', Object.keys(response.data || {}));
 
+      // Check for Cloudflare challenge page
+      if (typeof response.data === 'string' && response.data.includes('Just a moment')) {
+        console.log('Cloudflare challenge detected, will retry...');
+        throw new Error('Cloudflare challenge detected');
+      }
+
       if (response.data.errors) {
         console.log('GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
         throw new Error(`GraphQL errors: ${JSON.stringify(response.data.errors)}`);
@@ -156,8 +162,10 @@ class ProductHuntService {
 
       // Retry logic for network errors or rate limits
       if (retryCount < this.maxRetries && this.shouldRetry(error)) {
-        console.log(`Retrying in ${this.retryDelay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        // Increase delay for Cloudflare challenges
+        const delay = error.message.includes('Cloudflare challenge detected') ? 5000 : this.retryDelay;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeGraphQLRequest(query, variables, accessToken, retryCount + 1);
       }
 
@@ -167,6 +175,11 @@ class ProductHuntService {
 
   // Determine if we should retry the request
   shouldRetry(error) {
+    // Retry on Cloudflare challenges
+    if (error.message.includes('Cloudflare challenge detected')) {
+      return true;
+    }
+
     if (error.response) {
       const status = error.response.status;
       // Retry on rate limits, server errors, but not on auth errors
@@ -182,12 +195,12 @@ class ProductHuntService {
       console.log(`Fetching products launched today from Product Hunt...`);
 
       // Get recent products and filter for today's launches
-      // Use VOTES order to get highest-voted recent products (featured products)
+      // Use NEWEST order to get recently launched products, then sort by votes
       const query = this.getTrendingProductsQuery();
       const variables = {
         first: Math.min(limit * 5, 50), // Fetch more to find today's products
         after: null,
-        order: "VOTES" // Get highest-voted products first to match "Best of" page
+        order: "NEWEST" // Get newest products first, then we'll sort by votes
       };
 
       const response = await this.makeGraphQLRequest(query, variables, accessToken);
