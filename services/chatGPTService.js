@@ -18,7 +18,7 @@ class ChatGPTService {
 
   // Create optimized analysis prompt for a product (with Chinese translation)
   createAnalysisPrompt(product) {
-    return `Analyze this Product Hunt product for target users and market insights. Provide response in Chinese except for the product name:
+    return `Analyze this Product Hunt product for target users. Provide response in Chinese except for the product name:
 
 Product: ${product.name}
 Tagline: ${product.tagline}
@@ -30,12 +30,11 @@ Return JSON with Chinese content (except productName):
   "productName": "${product.name}",
   "targetUsers": [{"demographic": "目标用户群体描述", "likelihood": "高/中/低"}],
   "successProbability": "高/中/低",
-  "summary": "简短的一句话分析",
-  "marketInsights": "市场洞察和建议",
+  "summary": "详细的分析摘要，包含2-3句话，描述产品特点、目标用户和市场潜力",
   "userPersonas": ["用户画像1", "用户画像2", "用户画像3"]
 }
 
-请用中文分析，但保持产品名称为英文。重点关注最可能的目标用户群体。`;
+请用中文分析，但保持产品名称为英文。重点关注最可能的目标用户群体。分析摘要应该详细且有深度，不要过于简化。`;
   }
 
   // Analyze a single product with ChatGPT

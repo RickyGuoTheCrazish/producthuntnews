@@ -252,7 +252,7 @@ function generateResultsPage(data) {
         }
 
         function exportResultsCSV() {
-            const headers = ['产品名称', '标语', '投票数', '评论数', '成功概率', '目标用户群体', '市场洞察', '用户画像', '分析摘要', '产品链接', '主题标签', '创建时间'];
+            const headers = ['产品名称', '标语', '投票数', '评论数', '成功概率', '目标用户群体', '用户画像', '分析摘要', '产品链接', '主题标签', '创建时间'];
             const csvData = analysisData.products.map(product => {
                 const analysis = product.analysis || {};
                 return [
@@ -262,7 +262,6 @@ function generateResultsPage(data) {
                     product.commentsCount || 0,
                     \`"\${analysis.successProbability || '未知'}"\`,
                     \`"\${analysis.targetUsers ? analysis.targetUsers.map(u => \`\${u.demographic}(\${u.likelihood})\`).join('; ') : '未分析'}"\`,
-                    \`"\${analysis.marketInsights || '无'}"\`,
                     \`"\${analysis.userPersonas ? analysis.userPersonas.join('; ') : '无'}"\`,
                     \`"\${analysis.summary || '无分析'}"\`,
                     \`"\${product.url || ''}"\`,
