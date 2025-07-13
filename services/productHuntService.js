@@ -182,76 +182,86 @@ class ProductHuntService {
     try {
       console.log(`Fetching products launched today from Product Hunt...`);
 
-      // Try to get today's products using postedAfter parameter
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Start of today
-      const todayISO = today.toISOString();
-
-      console.log(`Looking for products posted after: ${todayISO}`);
-
-      const query = this.getTodayProductsQuery();
+      // Get recent products and filter for today's launches
+      // Product Hunt typically features products daily, so we'll get recent ones and filter
+      const query = this.getTrendingProductsQuery();
       const variables = {
-        first: limit,
+        first: Math.min(limit * 5, 50), // Fetch more to find today's products
         after: null,
-        postedAfter: todayISO,
         order: "VOTES"
       };
 
-      try {
-        const response = await this.makeGraphQLRequest(query, variables, accessToken);
+      const response = await this.makeGraphQLRequest(query, variables, accessToken);
 
-        if (response.data && response.data.posts && response.data.posts.edges.length > 0) {
-          const posts = response.data.posts.edges.map(edge => edge.node);
-          const products = posts.map(post => this.transformProduct(post));
+      if (!response.data || !response.data.posts) {
+        throw new Error('Invalid response structure from Product Hunt API');
+      }
 
-          console.log(`Successfully found ${products.length} products launched today (sorted by votes)`);
-          return products;
-        } else {
-          console.log('No products found for today using postedAfter, trying general trending...');
-          throw new Error('No products found for today');
-        }
-      } catch (todayError) {
-        console.log('Today\'s products query failed:', todayError.message);
+      const posts = response.data.posts.edges.map(edge => edge.node);
 
-        // Fallback to general trending products with VOTES order
-        console.log('Falling back to general trending products sorted by votes...');
-        const generalQuery = this.getTrendingProductsQuery();
-        const generalVariables = {
-          first: Math.min(limit * 2, 30), // Fetch more to filter client-side
-          after: null,
-          order: "VOTES"
-        };
+      // Filter for today's products using both createdAt and featuredAt
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-        const response = await this.makeGraphQLRequest(generalQuery, generalVariables, accessToken);
+      console.log(`Filtering ${posts.length} products for today's launches (${todayStart.toISOString().split('T')[0]})...`);
 
-        if (!response.data || !response.data.posts) {
-          throw new Error('Invalid response structure from Product Hunt API');
+      const todaysProducts = posts.filter(post => {
+        const createdDate = new Date(post.createdAt);
+        const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
+
+        // Check if created today OR featured today
+        const isCreatedToday = createdDate >= todayStart && createdDate < todayEnd;
+        const isFeaturedToday = featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
+
+        // Log for debugging
+        if (isCreatedToday || isFeaturedToday) {
+          console.log(`Found today's product: ${post.name} (created: ${post.createdAt}, featured: ${post.featuredAt})`);
         }
 
-        const posts = response.data.posts.edges.map(edge => edge.node);
+        return isCreatedToday || isFeaturedToday;
+      });
 
-        // Client-side filtering for today's products
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      if (todaysProducts.length > 0) {
+        // Sort today's products by votes (descending)
+        todaysProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
 
-        const todaysProducts = posts.filter(post => {
+        const products = todaysProducts.slice(0, limit).map(post => this.transformProduct(post));
+        console.log(`Successfully found ${products.length} products launched today (sorted by votes)`);
+        return products;
+      } else {
+        console.log('No products found for today. This might be normal if no products were launched today.');
+        console.log('Checking recent products for reference...');
+
+        // Show recent products with their dates for debugging
+        posts.slice(0, 5).forEach(post => {
+          console.log(`Recent product: ${post.name} (created: ${post.createdAt}, featured: ${post.featuredAt}, votes: ${post.votesCount})`);
+        });
+
+        // Instead of returning old trending products, let's try yesterday's products
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+        const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
+
+        const yesterdaysProducts = posts.filter(post => {
           const createdDate = new Date(post.createdAt);
           const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
 
-          const isCreatedToday = createdDate >= todayStart && createdDate < todayEnd;
-          const isFeaturedToday = featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
+          const isCreatedYesterday = createdDate >= yesterdayStart && createdDate < yesterdayEnd;
+          const isFeaturedYesterday = featuredDate && featuredDate >= yesterdayStart && featuredDate < yesterdayEnd;
 
-          return isCreatedToday || isFeaturedToday;
+          return isCreatedYesterday || isFeaturedYesterday;
         });
 
-        if (todaysProducts.length > 0) {
-          const products = todaysProducts.slice(0, limit).map(post => this.transformProduct(post));
-          console.log(`Found ${products.length} today's products via client-side filtering`);
+        if (yesterdaysProducts.length > 0) {
+          yesterdaysProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
+          const products = yesterdaysProducts.slice(0, limit).map(post => this.transformProduct(post));
+          console.log(`No today's products found, using ${products.length} products from yesterday`);
           return products;
         } else {
-          // Return recent trending if no today's products found
+          // Last resort: return most recent products but clearly indicate they're not from today
           const products = posts.slice(0, limit).map(post => this.transformProduct(post));
-          console.log(`No today's products found, returning ${products.length} recent trending products`);
+          console.log(`No recent daily products found, returning ${products.length} trending products (may not be from today)`);
           return products;
         }
       }
