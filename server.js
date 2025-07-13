@@ -23,8 +23,22 @@ const PORT = process.env.PORT || 3000;
 // Initialize global error handlers
 ErrorHandler.init();
 
-// Security middleware
-app.use(helmet());
+// Security middleware with relaxed CSP for internal tool
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https:"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+}));
 app.use(cors());
 
 // Rate limiting with enhanced error handling

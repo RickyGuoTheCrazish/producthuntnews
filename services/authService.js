@@ -5,13 +5,15 @@ const path = require('path');
 
 class AuthService {
   constructor() {
-    // Product Hunt requires OAuth 2.0 even for internal applications
-    if (!process.env.PH_CLIENT_ID || !process.env.PH_CLIENT_SECRET ||
-        process.env.PH_CLIENT_ID === 'your_product_hunt_client_id' ||
-        process.env.PH_CLIENT_SECRET === 'your_product_hunt_client_secret') {
-      console.warn('Product Hunt OAuth credentials not configured. Set PH_CLIENT_ID and PH_CLIENT_SECRET environment variables.');
-      this.client = null;
-    } else {
+    // Check for developer token first (simpler approach)
+    if (process.env.PH_DEVELOPER_TOKEN && process.env.PH_DEVELOPER_TOKEN !== 'your_developer_token') {
+      console.log('Product Hunt Developer Token configured for internal use');
+      this.developerToken = process.env.PH_DEVELOPER_TOKEN;
+      this.client = null; // Don't need OAuth client with developer token
+    } else if (process.env.PH_CLIENT_ID && process.env.PH_CLIENT_SECRET &&
+        process.env.PH_CLIENT_ID !== 'your_product_hunt_client_id' &&
+        process.env.PH_CLIENT_SECRET !== 'your_product_hunt_client_secret') {
+      console.log('Product Hunt OAuth configured for internal use');
       this.client = new AuthorizationCode({
         client: {
           id: process.env.PH_CLIENT_ID,
@@ -23,7 +25,11 @@ class AuthService {
           authorizePath: '/v2/oauth/authorize',
         },
       });
-      console.log('Product Hunt OAuth configured for internal use');
+      this.developerToken = null;
+    } else {
+      console.warn('Product Hunt credentials not configured. Set PH_DEVELOPER_TOKEN or PH_CLIENT_ID/PH_CLIENT_SECRET environment variables.');
+      this.client = null;
+      this.developerToken = null;
     }
 
     this.tokenFile = path.join(__dirname, '..', 'data', 'access_token.json');
@@ -33,9 +39,12 @@ class AuthService {
   // Background authentication check (for internal monitoring)
   checkAuthStatus = async (req, res) => {
     try {
-      if (!this.client) {
+      // Check if we have any form of authentication
+      const hasAuth = this.developerToken || this.client;
+
+      if (!hasAuth) {
         return res.status(500).json({
-          error: 'Product Hunt OAuth not configured. Please set PH_CLIENT_ID and PH_CLIENT_SECRET environment variables.',
+          error: 'Product Hunt credentials not configured. Set PH_DEVELOPER_TOKEN or PH_CLIENT_ID/PH_CLIENT_SECRET environment variables.',
           configured: false,
           requiresSetup: true
         });
@@ -48,6 +57,7 @@ class AuthService {
         configured: true,
         authenticated: isAuth,
         tokenInfo: tokenInfo,
+        authMethod: this.developerToken ? 'developer_token' : 'oauth',
         message: isAuth ? 'Authentication active' : 'Authentication required'
       });
     } catch (error) {
@@ -151,8 +161,14 @@ class AuthService {
     }
   }
 
-  // Get stored access token
+  // Get stored access token or developer token
   async getStoredToken() {
+    // If we have a developer token, use it directly
+    if (this.developerToken) {
+      return this.developerToken;
+    }
+
+    // Otherwise, try to get OAuth token from file
     try {
       const tokenData = await fs.readFile(this.tokenFile, 'utf8');
       const token = JSON.parse(tokenData);
@@ -208,12 +224,24 @@ class AuthService {
 
   // Get token info for status endpoint
   async getTokenInfo() {
+    // If using developer token, return simple status
+    if (this.developerToken) {
+      return {
+        hasToken: true,
+        authMethod: 'developer_token',
+        isExpired: false,
+        configured: true
+      };
+    }
+
+    // Otherwise check OAuth token file
     try {
       const tokenData = await fs.readFile(this.tokenFile, 'utf8');
       const token = JSON.parse(tokenData);
 
       return {
         hasToken: true,
+        authMethod: 'oauth',
         scope: token.scope,
         expires_at: token.expires_at,
         created_at: token.created_at,
@@ -223,6 +251,7 @@ class AuthService {
     } catch (error) {
       return {
         hasToken: false,
+        authMethod: 'oauth',
         configured: !!this.client,
         error: error.code === 'ENOENT' ? 'No token stored' : error.message
       };
