@@ -48,11 +48,6 @@ class ProductHuntService {
                 type
                 url
               }
-              gallery {
-                images {
-                  url
-                }
-              }
               user {
                 id
                 name
@@ -180,7 +175,6 @@ class ProductHuntService {
       createdAt: post.createdAt,
       featuredAt: post.featuredAt,
       thumbnail: post.thumbnail?.url || null,
-      gallery: post.gallery?.images?.map(img => img.url) || [],
       makers: post.makers?.map(maker => ({
         id: maker.id,
         name: maker.name,
