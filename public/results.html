@@ -378,18 +378,12 @@
                 const finalData = JSON.parse(event.data);
                 analysisData = finalData;
 
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('results-content').classList.remove('hidden');
-
-                // Update final stats
-                document.getElementById('total-products').textContent = finalData.totalProducts;
-                document.getElementById('success-count').textContent = finalData.successCount;
-                document.getElementById('error-count').textContent = finalData.errorCount;
-
-                const totalVotes = finalData.products.reduce((sum, product) => sum + (product.votesCount || 0), 0);
-                document.getElementById('total-votes').textContent = totalVotes.toLocaleString();
-
                 eventSource.close();
+
+                // Redirect to the dynamic results page after a short delay
+                setTimeout(() => {
+                    window.location.href = '/results';
+                }, 1000);
             });
 
             eventSource.addEventListener('error', function(event) {
