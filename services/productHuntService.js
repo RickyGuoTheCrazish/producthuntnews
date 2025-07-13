@@ -69,10 +69,8 @@ class ProductHuntService {
               createdAt
               featuredAt
               website
-              makers {
-                id
-                name
-                username
+              thumbnail {
+                url
               }
               topics {
                 edges {
@@ -80,14 +78,6 @@ class ProductHuntService {
                     name
                   }
                 }
-              }
-              thumbnail {
-                url
-              }
-              user {
-                id
-                name
-                username
               }
             }
           }
@@ -140,8 +130,17 @@ class ProductHuntService {
         }
       );
 
+      console.log('GraphQL Response status:', response.status);
+      console.log('GraphQL Response data keys:', Object.keys(response.data || {}));
+
       if (response.data.errors) {
+        console.log('GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
         throw new Error(`GraphQL errors: ${JSON.stringify(response.data.errors)}`);
+      }
+
+      if (!response.data || !response.data.data) {
+        console.log('Invalid response structure. Full response:', JSON.stringify(response.data, null, 2));
+        throw new Error('Invalid response structure from Product Hunt API');
       }
 
       return response.data;
