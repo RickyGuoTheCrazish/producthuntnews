@@ -8,66 +8,7 @@ class ProductHuntService {
     this.retryDelay = 1000; // 1 second
   }
 
-  // GraphQL query to get today's trending products (launched today, sorted by votes)
-  getTodaysTrendingProductsQuery() {
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date().toISOString().split('T')[0];
-
-    return `
-      query getTodaysPosts($first: Int!, $after: String, $postedAfter: DateTime!) {
-        posts(first: $first, after: $after, order: VOTES, postedAfter: $postedAfter) {
-          edges {
-            node {
-              id
-              name
-              tagline
-              description
-              url
-              votesCount
-              commentsCount
-              createdAt
-              featuredAt
-              website
-              productLinks {
-                type
-                url
-              }
-              makers {
-                id
-                name
-                username
-                profileImage
-              }
-              topics {
-                edges {
-                  node {
-                    id
-                    name
-                    slug
-                  }
-                }
-              }
-              thumbnail {
-                type
-                url
-              }
-              user {
-                id
-                name
-                username
-              }
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    `;
-  }
-
-  // Fallback query for general trending products if today's query fails
+  // GraphQL query to get trending products sorted by votes
   getTrendingProductsQuery() {
     return `
       query getTrendingPosts($first: Int!, $after: String) {
@@ -207,53 +148,60 @@ class ProductHuntService {
   // Get today's trending products from Product Hunt (launched today, sorted by votes)
   async getTrendingProducts(accessToken, limit = 20) {
     try {
-      console.log(`Fetching ${limit} products launched today from Product Hunt...`);
+      console.log(`Fetching products launched today from Product Hunt...`);
 
-      // First try to get today's products
-      const todaysQuery = this.getTodaysTrendingProductsQuery();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Start of today
+      // Fetch more products than needed to filter for today's launches
+      const fetchLimit = Math.max(limit * 3, 50); // Fetch 3x more to ensure we get today's products
 
-      const todaysVariables = {
-        first: limit,
-        after: null,
-        postedAfter: today.toISOString()
+      const query = this.getTrendingProductsQuery();
+      const variables = {
+        first: fetchLimit,
+        after: null
       };
 
-      try {
-        const response = await this.makeGraphQLRequest(todaysQuery, todaysVariables, accessToken);
+      const response = await this.makeGraphQLRequest(query, variables, accessToken);
 
-        if (response.data && response.data.posts && response.data.posts.edges.length > 0) {
-          const posts = response.data.posts.edges.map(edge => edge.node);
-          const products = posts.map(post => this.transformProduct(post));
+      if (!response.data || !response.data.posts) {
+        throw new Error('Invalid response structure from Product Hunt API');
+      }
 
-          console.log(`Successfully fetched ${products.length} products launched today`);
-          return products;
-        } else {
-          console.log('No products found for today, falling back to general trending...');
-          throw new Error('No products found for today');
-        }
-      } catch (todayError) {
-        console.log('Today\'s products query failed, trying general trending...', todayError.message);
+      const posts = response.data.posts.edges.map(edge => edge.node);
 
-        // Fallback to general trending products
-        const query = this.getTrendingProductsQuery();
-        const variables = {
-          first: limit,
-          after: null
-        };
+      // Filter for today's products
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
-        const response = await this.makeGraphQLRequest(query, variables, accessToken);
+      console.log(`Filtering for products launched today (${todayStart.toISOString().split('T')[0]})...`);
 
-        if (!response.data || !response.data.posts) {
-          throw new Error('Invalid response structure from Product Hunt API');
-        }
+      const todaysProducts = posts.filter(post => {
+        // Check both createdAt and featuredAt for today's date
+        const createdDate = new Date(post.createdAt);
+        const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
 
-        const posts = response.data.posts.edges.map(edge => edge.node);
-        const products = posts.map(post => this.transformProduct(post));
+        const isCreatedToday = createdDate >= todayStart && createdDate < todayEnd;
+        const isFeaturedToday = featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
 
-        console.log(`Successfully fetched ${products.length} trending products (fallback)`);
+        return isCreatedToday || isFeaturedToday;
+      });
+
+      // Sort by votes count (descending)
+      todaysProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
+
+      // Take only the requested number of products
+      const limitedProducts = todaysProducts.slice(0, limit);
+
+      if (limitedProducts.length > 0) {
+        const products = limitedProducts.map(post => this.transformProduct(post));
+        console.log(`Successfully found ${products.length} products launched today (sorted by votes)`);
         return products;
+      } else {
+        console.log('No products found for today, using recent trending products...');
+
+        // If no today's products, return recent trending products sorted by votes
+        const allProducts = posts.slice(0, limit).map(post => this.transformProduct(post));
+        console.log(`Using ${allProducts.length} recent trending products as fallback`);
+        return allProducts;
       }
 
     } catch (error) {
