@@ -8,7 +8,7 @@ class ProductHuntService {
     this.retryDelay = 1000; // 1 second
   }
 
-  // GraphQL query to get trending products sorted by votes
+  // Simplified GraphQL query to get trending products sorted by votes (reduced complexity)
   getTrendingProductsQuery() {
     return `
       query getTrendingPosts($first: Int!, $after: String) {
@@ -25,27 +25,19 @@ class ProductHuntService {
               createdAt
               featuredAt
               website
-              productLinks {
-                type
-                url
-              }
               makers {
                 id
                 name
                 username
-                profileImage
               }
               topics {
                 edges {
                   node {
-                    id
                     name
-                    slug
                   }
                 }
               }
               thumbnail {
-                type
                 url
               }
               user {
@@ -54,10 +46,6 @@ class ProductHuntService {
                 username
               }
             }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
           }
         }
       }
@@ -150,8 +138,9 @@ class ProductHuntService {
     try {
       console.log(`Fetching products launched today from Product Hunt...`);
 
-      // Fetch more products than needed to filter for today's launches
-      const fetchLimit = Math.max(limit * 3, 50); // Fetch 3x more to ensure we get today's products
+      // Fetch a reasonable number of products to filter for today's launches
+      // Keep it under GraphQL complexity limit (500,000)
+      const fetchLimit = Math.min(limit * 2, 30); // Fetch 2x more but cap at 30 to avoid complexity issues
 
       const query = this.getTrendingProductsQuery();
       const variables = {
@@ -306,9 +295,9 @@ class ProductHuntService {
         profileImage: maker.profileImage
       })) || [],
       topics: post.topics?.edges?.map(edge => ({
-        id: edge.node.id,
+        id: edge.node.id || '',
         name: edge.node.name,
-        slug: edge.node.slug
+        slug: edge.node.slug || edge.node.name?.toLowerCase().replace(/\s+/g, '-') || ''
       })) || [],
       productLinks: post.productLinks?.map(link => ({
         type: link.type,
