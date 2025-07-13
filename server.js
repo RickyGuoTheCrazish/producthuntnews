@@ -20,6 +20,9 @@ const InternalAuth = require('./middleware/internalAuth');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Heroku deployment
+app.set('trust proxy', 1);
+
 // Initialize global error handlers
 ErrorHandler.init();
 
