@@ -52,11 +52,11 @@ class ProductHuntService {
     `;
   }
 
-  // Simplified GraphQL query to get trending products sorted by votes (reduced complexity)
-  getTrendingProductsQuery() {
+  // GraphQL query to get featured products sorted by featured date
+  getFeaturedProductsQuery() {
     return `
-      query getTrendingPosts($first: Int!, $after: String, $order: PostsOrder!) {
-        posts(first: $first, after: $after, order: $order) {
+      query getFeaturedPosts($first: Int!, $after: String, $order: PostsOrder!, $featured: Boolean!) {
+        posts(first: $first, after: $after, order: $order, featured: $featured) {
           edges {
             node {
               id
@@ -194,13 +194,13 @@ class ProductHuntService {
     try {
       console.log(`Fetching products launched today from Product Hunt...`);
 
-      // Get recent products and filter for today's launches
-      // Use NEWEST order to get recently launched products, then sort by votes
-      const query = this.getTrendingProductsQuery();
+      // Get featured products sorted by featured date (this matches "Best of" pages)
+      const query = this.getFeaturedProductsQuery();
       const variables = {
-        first: Math.min(limit * 5, 50), // Fetch more to find today's products
+        first: Math.min(limit * 5, 50), // Fetch more to find today's featured products
         after: null,
-        order: "NEWEST" // Get newest products first, then we'll sort by votes
+        order: "FEATURED_AT", // Sort by featured date (most recent featured first)
+        featured: true // Only get featured products (like "Best of" pages)
       };
 
       const response = await this.makeGraphQLRequest(query, variables, accessToken);
@@ -218,49 +218,30 @@ class ProductHuntService {
 
       console.log(`Filtering ${posts.length} products for today's launches (${todayStart.toISOString().split('T')[0]})...`);
 
-      const todaysProducts = posts.filter(post => {
-        const createdDate = new Date(post.createdAt);
+      // Filter for today's featured products (since we're only getting featured products now)
+      const todaysFeaturedProducts = posts.filter(post => {
         const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
 
-        // Prioritize featured products (which appear on "Best of" pages)
-        const isCreatedToday = createdDate >= todayStart && createdDate < todayEnd;
-        const isFeaturedToday = featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
-
-        // Log for debugging
-        if (isCreatedToday || isFeaturedToday) {
-          console.log(`Found today's product: ${post.name} (created: ${post.createdAt}, featured: ${post.featuredAt}, votes: ${post.votesCount})`);
+        if (!featuredDate) {
+          return false; // Skip products without featured date
         }
 
-        return isCreatedToday || isFeaturedToday;
+        const isFeaturedToday = featuredDate >= todayStart && featuredDate < todayEnd;
+
+        // Log for debugging
+        if (isFeaturedToday) {
+          console.log(`Found today's featured product: ${post.name} (featured: ${post.featuredAt}, votes: ${post.votesCount})`);
+        }
+
+        return isFeaturedToday;
       });
 
-      // Separate featured and non-featured products
-      const featuredProducts = todaysProducts.filter(post => {
-        const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
-        return featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
-      });
+      if (todaysFeaturedProducts.length > 0) {
+        // Sort featured products by votes (highest first)
+        todaysFeaturedProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
 
-      const createdProducts = todaysProducts.filter(post => {
-        const createdDate = new Date(post.createdAt);
-        const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
-        const isCreatedToday = createdDate >= todayStart && createdDate < todayEnd;
-        const isFeaturedToday = featuredDate && featuredDate >= todayStart && featuredDate < todayEnd;
-        return isCreatedToday && !isFeaturedToday; // Only created today, not featured
-      });
-
-      if (featuredProducts.length > 0) {
-        // Prioritize featured products (these appear on "Best of" pages)
-        featuredProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
-
-        const products = featuredProducts.slice(0, limit).map(post => this.transformProduct(post));
+        const products = todaysFeaturedProducts.slice(0, limit).map(post => this.transformProduct(post));
         console.log(`Successfully found ${products.length} featured products for today (sorted by votes)`);
-        return products;
-      } else if (todaysProducts.length > 0) {
-        // Fallback to created products if no featured products
-        todaysProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
-
-        const products = todaysProducts.slice(0, limit).map(post => this.transformProduct(post));
-        console.log(`Successfully found ${products.length} products created today (sorted by votes)`);
         return products;
       } else {
         console.log('No products found for today. This might be normal if no products were launched today.');
@@ -276,31 +257,28 @@ class ProductHuntService {
         const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
         const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
 
-        const yesterdaysProducts = posts.filter(post => {
-          const createdDate = new Date(post.createdAt);
+        // Filter for yesterday's featured products (since we're only getting featured products)
+        const yesterdaysFeatured = posts.filter(post => {
           const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
 
-          const isCreatedYesterday = createdDate >= yesterdayStart && createdDate < yesterdayEnd;
-          const isFeaturedYesterday = featuredDate && featuredDate >= yesterdayStart && featuredDate < yesterdayEnd;
+          if (!featuredDate) {
+            return false; // Skip products without featured date
+          }
 
-          return isCreatedYesterday || isFeaturedYesterday;
-        });
+          const isFeaturedYesterday = featuredDate >= yesterdayStart && featuredDate < yesterdayEnd;
 
-        // Prioritize yesterday's featured products
-        const yesterdaysFeatured = yesterdaysProducts.filter(post => {
-          const featuredDate = post.featuredAt ? new Date(post.featuredAt) : null;
-          return featuredDate && featuredDate >= yesterdayStart && featuredDate < yesterdayEnd;
+          // Log for debugging
+          if (isFeaturedYesterday) {
+            console.log(`Found yesterday's featured product: ${post.name} (featured: ${post.featuredAt}, votes: ${post.votesCount})`);
+          }
+
+          return isFeaturedYesterday;
         });
 
         if (yesterdaysFeatured.length > 0) {
           yesterdaysFeatured.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
           const products = yesterdaysFeatured.slice(0, limit).map(post => this.transformProduct(post));
-          console.log(`No today's products found, using ${products.length} featured products from yesterday`);
-          return products;
-        } else if (yesterdaysProducts.length > 0) {
-          yesterdaysProducts.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
-          const products = yesterdaysProducts.slice(0, limit).map(post => this.transformProduct(post));
-          console.log(`No today's products found, using ${products.length} products from yesterday`);
+          console.log(`No today's featured products found, using ${products.length} featured products from yesterday`);
           return products;
         } else {
           // Last resort: return most recent products but clearly indicate they're not from today
