@@ -183,12 +183,12 @@ class ProductHuntService {
       console.log(`Fetching products launched today from Product Hunt...`);
 
       // Get recent products and filter for today's launches
-      // Product Hunt typically features products daily, so we'll get recent ones and filter
+      // Use NEWEST order to get recently launched products, then sort by votes
       const query = this.getTrendingProductsQuery();
       const variables = {
         first: Math.min(limit * 5, 50), // Fetch more to find today's products
         after: null,
-        order: "VOTES"
+        order: "NEWEST" // Get newest products first, then we'll sort by votes
       };
 
       const response = await this.makeGraphQLRequest(query, variables, accessToken);
