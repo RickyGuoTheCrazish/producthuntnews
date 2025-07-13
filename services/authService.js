@@ -165,8 +165,11 @@ class AuthService {
   async getStoredToken() {
     // If we have a developer token, use it directly
     if (this.developerToken) {
+      console.log('Using developer token for authentication');
       return this.developerToken;
     }
+
+    console.log('No developer token found, checking for OAuth token...');
 
     // Otherwise, try to get OAuth token from file
     try {

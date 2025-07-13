@@ -72,6 +72,20 @@ class ProductHuntService {
   // Make GraphQL request with retry logic
   async makeGraphQLRequest(query, variables, accessToken, retryCount = 0) {
     try {
+      // Try different auth header formats for Product Hunt API
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+
+      // Product Hunt developer token format
+      if (accessToken) {
+        authHeaders['Authorization'] = `Bearer ${accessToken}`;
+      }
+
+      console.log('Making request to:', this.apiUrl);
+      console.log('Auth header present:', !!authHeaders['Authorization']);
+
       const response = await axios.post(
         this.apiUrl,
         {
@@ -79,11 +93,7 @@ class ProductHuntService {
           variables
         },
         {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
+          headers: authHeaders,
           timeout: 30000 // 30 seconds timeout
         }
       );
@@ -95,14 +105,21 @@ class ProductHuntService {
       return response.data;
     } catch (error) {
       console.error(`GraphQL request failed (attempt ${retryCount + 1}):`, error.message);
-      
+
+      // Log more details about the error
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+        console.error('Response headers:', error.response.headers);
+      }
+
       // Retry logic for network errors or rate limits
       if (retryCount < this.maxRetries && this.shouldRetry(error)) {
         console.log(`Retrying in ${this.retryDelay}ms...`);
         await new Promise(resolve => setTimeout(resolve, this.retryDelay));
         return this.makeGraphQLRequest(query, variables, accessToken, retryCount + 1);
       }
-      
+
       throw error;
     }
   }

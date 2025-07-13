@@ -29,6 +29,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https:"],
@@ -116,6 +117,17 @@ app.get('/api/status', ErrorHandler.asyncHandler(async (req, res) => {
 // Health check endpoint for Heroku
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'healthy' });
+});
+
+// Debug endpoint to check environment variables
+app.get('/debug/env', (req, res) => {
+  res.json({
+    hasPHToken: !!process.env.PH_DEVELOPER_TOKEN,
+    tokenLength: process.env.PH_DEVELOPER_TOKEN ? process.env.PH_DEVELOPER_TOKEN.length : 0,
+    tokenPreview: process.env.PH_DEVELOPER_TOKEN ? process.env.PH_DEVELOPER_TOKEN.substring(0, 10) + '...' : 'not set',
+    hasOpenAI: !!process.env.OPENAI_API_KEY,
+    nodeEnv: process.env.NODE_ENV
+  });
 });
 
 // Server-Sent Events endpoint for real-time analysis
